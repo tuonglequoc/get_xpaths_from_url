@@ -2,18 +2,8 @@ from bs4 import BeautifulSoup as bs
 from selenium import webdriver
 from selenium.webdriver import ChromeOptions as Options
 
+from config import TAGS, ATTRIBUTES_PRIORITY, SHOW_HIDDEN_ELEMENTS
 
-TAGS = ["input", "textarea", "select", "button", "a"]
-ATTRIBUTE_LIST = [
-    "id",
-    "name",
-    "placeholder",
-    "value",
-    "title",
-    "type",
-    "href",
-    "class",
-]
 
 options = Options()
 options.add_argument("--headless")
@@ -39,11 +29,11 @@ def get_xpath(soup: bs):
     for tag in TAGS:
         elements = soup.find_all(tag)
         for element in elements:
-            if element.has_attr("type") and element["type"] == "hidden":
+            if not SHOW_HIDDEN_ELEMENTS and not is_visible(element):
                 continue
             element_result = {}
             xpath = f"//{tag}"
-            for attr in ATTRIBUTE_LIST:
+            for attr in ATTRIBUTES_PRIORITY:
                 if element.has_attr(attr):
                     value = element[attr]
                     if type(value) is list:
@@ -51,7 +41,10 @@ def get_xpath(soup: bs):
                     xpath += "[@{}='{}']".format(attr, value)
                     break
             element_result["xpath"] = xpath
-            element_result.update(element.attrs)
+            element_result["attributes"] = element.attrs
+            class_attr = element_result["attributes"].get("class")
+            if (class_attr and isinstance(class_attr, list)):
+                element_result["attributes"]["class"] = " ".join(class_attr)
             result.append(element_result)
     return result
 
@@ -59,3 +52,19 @@ def get_xpath(soup: bs):
 def get_title(soup: bs):
     title = soup.find("title")
     return title.get_text()
+
+def is_visible(tag):
+    # loads the style attribute of the element
+    style = tag.attrs.get('style', False)
+
+    # checks if the element is hidden
+    if style and ('hidden' in style or 'display: none' in style or 'display:none' in style):
+        return False
+
+    # makes a recursive call to check the parent as well
+    parent = tag.parent
+    if parent and not is_visible(parent):
+        return False
+
+    # neither the element nor its parent(s) are hidden, so return True
+    return True
